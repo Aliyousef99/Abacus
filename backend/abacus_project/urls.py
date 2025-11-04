@@ -11,10 +11,7 @@ from rest_framework_simplejwt.views import (
 )
 
 urlpatterns = [
-    # Serve Facade/Abacus from Django templates at root
-    path('', TemplateView.as_view(template_name='index/index.html'), name='frontend-index'),
-    # Frontend index served by Django templates
-    path('', TemplateView.as_view(template_name='index/index.html'), name='frontend-index'),
+    path('', TemplateView.as_view(template_name='index.html'), name='frontend-index'),
     path('admin/', admin.site.urls),
 
     # --- API URL Patterns ---

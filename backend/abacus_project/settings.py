@@ -14,7 +14,8 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['.vercel.app']
+CSRF_TRUSTED_ORIGINS = ['https://*.vercel.app']
 
 # Secondary authentication passphrase (for reveal/Vault). Defaults to requested phrase.
 SECONDARY_PASSPHRASE = config('SECONDARY_PASSPHRASE', default='the rooster crows at dawn')
@@ -119,6 +120,10 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'staticfiles'),
+]
 
 STORAGES = {
     "staticfiles": {
