@@ -1,4 +1,5 @@
 {
+  "version": 2,
   "builds": [
     {
       "src": "backend/abacus_project/wsgi.py",
@@ -6,10 +7,14 @@
       "config": { "maxLambdaSize": "15mb", "runtime": "python3.9" }
     }
   ],
-  "rewrites": [
+  "routes": [
+    {
+      "src": "/static/(.*)",
+      "dest": "/staticfiles/$1"
+    },
     {
       "src": "/(.*)",
-      "destination": "backend/abacus_project/wsgi.py"
+      "dest": "backend/abacus_project/wsgi.py"
     }
   ]
 }
