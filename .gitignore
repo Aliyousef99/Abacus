@@ -4,6 +4,7 @@
 !/vercel.json
 !/.gitignore
 !/build.sh
+!/api/
 
 # OS/Editor
 .DS_Store
