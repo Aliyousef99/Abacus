@@ -2,6 +2,14 @@
   "version": 2,
   "builds": [
     {
+      "src": "backend/requirements.txt",
+      "use": "@vercel/static-build",
+      "config": {
+        "command": "python3 -m pip install -r backend/requirements.txt && python3 backend/manage.py collectstatic --noinput",
+        "outputDirectory": "staticfiles"
+      }
+    },
+    {
       "src": "backend/abacus_project/wsgi.py",
       "use": "@vercel/python",
       "config": { "maxLambdaSize": "15mb", "runtime": "python3.9" }
