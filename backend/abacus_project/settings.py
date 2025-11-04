@@ -15,10 +15,9 @@ SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = [
-    # Add the Vercel deployment URL
-    '.vercel.app',
+    'abacus-ebon.vercel.app',  # Your production URL
+    '.vercel.app',             # Matches all preview URLs
 ]
-
 
 # Secondary authentication passphrase (for reveal/Vault). Defaults to requested phrase.
 SECONDARY_PASSPHRASE = config('SECONDARY_PASSPHRASE', default='the rooster crows at dawn')
