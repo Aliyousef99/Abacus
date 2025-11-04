@@ -1,5 +1,5 @@
 *
-!/backend/
+!/backend/**
 !/frontend/
 !/vercel.json
 !/.gitignore
