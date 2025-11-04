@@ -13,6 +13,7 @@ bcrypt # For secure password hashing
 
 # REST API
 djangorestframework
+djangorestframework-nested
 djangorestframework-simplejwt
 django-cors-headers
 
