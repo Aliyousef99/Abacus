@@ -54,7 +54,7 @@ class IsObserver(BasePermission):
     def has_permission(self, request, view):
         return get_user_role(request.user) in ['OBSERVER', 'HQ']
 
-# Backwards-compatible alias
+# Backwards-compatible alias (deprecated)
 class IsOverlooker(IsObserver):
     pass
 
@@ -68,3 +68,8 @@ class IsHQ(BasePermission):
     """Allows access only to users with the 'HQ' role."""
     def has_permission(self, request, view):
         return get_user_role(request.user) == 'HQ'
+
+class IsHQProtectorOrHeir(BasePermission):
+    """HQ, Protector, or Heir may perform the action (e.g., destructive ops)."""
+    def has_permission(self, request, view):
+        return get_user_role(request.user) in ['HQ', 'PROTECTOR', 'HEIR']

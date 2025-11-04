@@ -127,8 +127,24 @@ class EchoViewSet(viewsets.ModelViewSet):
     serializer_class = EchoSerializer
     permission_classes = [IsAuthenticated]
 
+    def get_permissions(self):
+        """
+        Instantiates and returns the list of permissions that this view requires.
+        """
+        if self.action == 'destroy':
+            self.permission_classes = [IsTrueProtector] # IsTrueProtector is HQ or Protector
+        else:
+            self.permission_classes = [IsAuthenticated]
+        return super(EchoViewSet, self).get_permissions()
+
     def perform_create(self, serializer):
+        role = get_user_role(self.request.user)
+        # Non-leadership cannot pre-assign agents.
+        if role not in ['PROTECTOR', 'HEIR', 'HQ']:
+            if 'assigned_agents' in serializer.validated_data:
+                serializer.validated_data.pop('assigned_agents')
         echo = serializer.save(created_by=self.request.user)
+
         log_action(self.request.user, f"Submitted echo '{echo.title}' targeting {echo.suggested_target}", target=echo)
         # Notify leadership about new Silo report
         try:
@@ -145,16 +161,34 @@ class EchoViewSet(viewsets.ModelViewSet):
             pass
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = super().get_queryset().select_related('created_by').prefetch_related('assigned_agents')
+        
+        # Handle single status filter
         status_filter = self.request.query_params.get('status')
         if status_filter:
             qs = qs.filter(status=status_filter)
+        # Handle multiple status filter for archive view
+        status_in_filter = self.request.query_params.get('status__in')
+        if status_in_filter:
+            statuses = [s.strip().upper() for s in status_in_filter.split(',') if s.strip()]
+            if statuses:
+                qs = qs.filter(status__in=statuses)
+
+        q = self.request.query_params.get('q')
+        if q:
+            qs = qs.filter(Q(title__icontains=q) | Q(content__icontains=q))
+
         role = get_user_role(self.request.user)
         # Leadership: can see all (optionally filtered by status)
-        if role in ['PROTECTOR', 'HEIR']:
+        if role in ['PROTECTOR', 'HEIR', 'HQ']:
             return qs
         # Overlooker and others: can only see their own submissions
         return qs.filter(created_by=self.request.user)
+
+    def perform_destroy(self, instance):
+        title = instance.title
+        log_action(self.request.user, f"Permanently deleted Silo report '{title}'", target=instance)
+        instance.delete()
 
     @action(detail=True, methods=['post'], permission_classes=[IsProtectorOrHeir])
     def dismiss(self, request, pk=None):
@@ -203,6 +237,8 @@ class EchoViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get', 'post'], permission_classes=[IsProtectorOrHeir], url_path='comments')
     def comments(self, request, pk=None):
         echo = self.get_object()
+        if echo.status == Echo.Status.DISMISSED:
+            return Response({'error': 'Cannot comment on a dismissed report.'}, status=status.HTTP_400_BAD_REQUEST)
         if request.method.lower() == 'get':
             return Response(SiloCommentSerializer(echo.comments.select_related('user'), many=True).data)
         # POST add comment
@@ -215,6 +251,8 @@ class EchoViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], permission_classes=[IsProtectorOrHeir], url_path='assign')
     def assign(self, request, pk=None):
         echo = self.get_object()
+        if echo.status == Echo.Status.DISMISSED:
+            return Response({'error': 'Cannot assign agents to a dismissed report.'}, status=status.HTTP_400_BAD_REQUEST)
         agent_id = request.data.get('agent_id')
         try:
             agent = LineageAgent.objects.get(pk=agent_id)
@@ -227,6 +265,8 @@ class EchoViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], permission_classes=[IsProtectorOrHeir], url_path='unassign')
     def unassign(self, request, pk=None):
         echo = self.get_object()
+        if echo.status == Echo.Status.DISMISSED:
+            return Response({'error': 'Cannot unassign agents from a dismissed report.'}, status=status.HTTP_400_BAD_REQUEST)
         agent_id = request.data.get('agent_id')
         try:
             agent = LineageAgent.objects.get(pk=agent_id)
@@ -321,6 +361,26 @@ class TaskViewSet(viewsets.ModelViewSet):
         task.save(update_fields=['status'])
         log_action(request.user, f"Set task '{task.title}' status to {new_status}", target=task)
         return Response(self.get_serializer(task).data)
+
+    def create(self, request, *args, **kwargs):
+        # Translate assigned_to_role to assigned_to id before serializer validation
+        data = request.data.copy()
+        if 'assigned_to' not in data and 'assigned_to_role' in data:
+            role = data.get('assigned_to_role')
+            try:
+                user = User.objects.filter(profile__role=role).first()
+                if user:
+                    data['assigned_to'] = user.id
+            except Exception:
+                pass
+            # Do not pop 'assigned_to_role', let perform_create handle it
+
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
 
 
 class BulletinViewSet(viewsets.ModelViewSet):

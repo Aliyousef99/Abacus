@@ -7,11 +7,11 @@
 - Legacy files from older layouts moved to `backend/_root_legacy/` for reference.
 
 **Core Sections Of The Abacus**
-- Authentication & Roles — secure login; roles: Protector, Heir, Overlooker
+- Authentication & Roles — secure login; roles: Protector, Heir, Observer
 - The Index — universal people database (single source of truth)
 - The Lineage — Talon agents’ classified dossiers and status
 - The Scales — external factions, threat levels, and linked members
-- The Silo — one‑way intelligence reports from Overlooker
+- The Silo — one‑way intelligence reports from Observer
 - The Loom — operations planning, execution, and review
 - The Pulse — real‑time strategic dashboard
 - The Codex — knowledge base, history, doctrine, SOPs

@@ -1,41 +1,34 @@
 from rest_framework import serializers
-from .models import Faction, Agent, Leverage, Connection
-from lineage.models import Agent as LineageAgent
-
-class AgentSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Agent
-        fields = '__all__'
+from .models import Faction, Agent, Connection
+from lineage.serializers import AgentSerializer as LineageAgentSerializer
 
 class FactionSerializer(serializers.ModelSerializer):
-    members = AgentSerializer(many=True, read_only=True)
-    member_count = serializers.SerializerMethodField()
+    member_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Faction
         fields = [
-            'id', 'name', 'threat_index', 'description', 'is_active',
-            'picture_url', 'allies', 'strengths', 'weaknesses', 'members', 'member_count'
+            'id', 'name', 'threat_level', 'description', 'is_active',
+            'picture_url', 'strengths', 'weaknesses', 'member_count',
+            'allies', 'rivals', 'surveillance_urls'
         ]
 
-    def get_member_count(self, obj):
-        """
-        Calculates the number of members in the faction.
-        """
-        return obj.members.count()
-
-class LeverageSerializer(serializers.ModelSerializer):
+class AgentSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Leverage
-        fields = '__all__'
+        model = Agent
+        fields = [
+            'id', 'name', 'alias', 'rank', 'strengths', 'weaknesses',
+            'known_locations', 'known_vehicles', 'picture_url',
+            'surveillance_images', 'threat_level'
+        ]
 
 class ConnectionSerializer(serializers.ModelSerializer):
-    scales_agent_id = serializers.IntegerField(source='scales_agent.id', read_only=True)
-    scales_agent_alias = serializers.CharField(source='scales_agent.alias', read_only=True)
-    lineage_agent_id = serializers.IntegerField(source='lineage_agent.id')
-    lineage_agent_alias = serializers.CharField(source='lineage_agent.alias', read_only=True)
+    scales_agent = AgentSerializer(read_only=True)
+    lineage_agent = LineageAgentSerializer(read_only=True)
 
     class Meta:
         model = Connection
-        fields = ['id', 'scales_agent_id', 'scales_agent_alias', 'lineage_agent_id', 'lineage_agent_alias', 'relationship', 'note', 'created_at']
-        read_only_fields = ['id', 'scales_agent_id', 'scales_agent_alias', 'lineage_agent_alias', 'created_at']
+        fields = [
+            'id', 'scales_agent', 'lineage_agent', 'relationship',
+            'note', 'created_at'
+        ]

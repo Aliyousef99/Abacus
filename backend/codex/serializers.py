@@ -1,5 +1,13 @@
 from rest_framework import serializers
 from .models import CodexEntry, Echo, Task, SiloComment, VaultItem, PropertyDossier, Vehicle, Bulletin, BulletinAck, Notification
+from django.contrib.auth.models import User
+
+class UserDisplaySerializer(serializers.ModelSerializer):
+    display_name = serializers.CharField(source='profile.display_name', read_only=True)
+
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'display_name']
 
 class CodexEntrySerializer(serializers.ModelSerializer):
     class Meta:
@@ -7,15 +15,26 @@ class CodexEntrySerializer(serializers.ModelSerializer):
         fields = ['id', 'title', 'summary', 'content', 'entry_type', 'image_urls', 'created_at']
 
 class EchoSerializer(serializers.ModelSerializer):
-    created_by_username = serializers.CharField(source='created_by.username', read_only=True)
+    created_by = UserDisplaySerializer(read_only=True)
     decided_by_username = serializers.CharField(source='decided_by.username', read_only=True)
-    assigned = serializers.SerializerMethodField()
     class Meta:
         model = Echo
-        fields = ['id', 'title', 'content', 'suggested_target', 'confidence', 'involved_entities', 'evidence_urls', 'status', 'created_by', 'created_by_username', 'decided_by', 'decided_by_username', 'created_at', 'decided_at', 'assigned']
-        read_only_fields = ['status', 'created_by', 'created_by_username', 'decided_by', 'decided_by_username', 'created_at', 'decided_at']
-    def get_assigned(self, obj):
-        return [{'id': a.id, 'alias': a.alias} for a in obj.assigned_agents.all()]
+        fields = ['id', 'title', 'content', 'suggested_target', 'confidence', 'involved_entities', 'evidence_urls', 'status', 'created_by', 'decided_by', 'decided_by_username', 'created_at', 'decided_at']
+        read_only_fields = ['status', 'created_by', 'decided_by', 'decided_by_username', 'created_at', 'decided_at']
+
+    def to_representation(self, instance):
+        """Ensure involved_entities has a consistent structure for the frontend."""
+        ret = super().to_representation(instance)
+        entities = ret.get('involved_entities', [])
+        if isinstance(entities, list):
+            normalized_entities = []
+            for entity in entities:
+                if isinstance(entity, dict) and 'id' in entity and 'type' in entity and 'name' in entity:
+                    # Ensure ID is a string for consistency, as it comes from the form.
+                    entity['id'] = str(entity['id'])
+                    normalized_entities.append(entity)
+            ret['involved_entities'] = normalized_entities
+        return ret
 
 class TaskSerializer(serializers.ModelSerializer):
     created_by_username = serializers.CharField(source='created_by.username', read_only=True)
@@ -26,10 +45,10 @@ class TaskSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_by', 'created_by_username', 'created_at']
 
 class SiloCommentSerializer(serializers.ModelSerializer):
-    user_username = serializers.CharField(source='user.username', read_only=True)
+    user = UserDisplaySerializer(read_only=True)
     class Meta:
         model = SiloComment
-        fields = ['id', 'echo', 'user', 'user_username', 'message', 'created_at']
+        fields = ['id', 'user', 'message', 'created_at']
         read_only_fields = ['id', 'echo', 'user', 'user_username', 'created_at']
 
 class VaultItemSerializer(serializers.ModelSerializer):

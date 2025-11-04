@@ -1,8 +1,7 @@
-## Root scope: only track backend/
-/*
-!/.gitignore
-!/backend/
-!/README.md
+## Standard ignores
+# We will now track everything by default, except for the files listed below.
+# The lines that ignored everything and only un-ignored the backend have been removed.
+!/frontend/ # This line is no longer strictly necessary but is kept for clarity
 
 # OS/Editor
 .DS_Store

@@ -8,7 +8,6 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('index', '0002_indexprofile_picture_url'),
-        ('scales', '0009_agent_surveillance_images_faction_picture_url'),
     ]
 
     operations = [
@@ -23,10 +22,5 @@ class Migration(migrations.Migration):
             options={
                 'unique_together': {('profile', 'faction')},
             },
-        ),
-        migrations.AlterField(
-            model_name='indexprofile',
-            name='affiliations',
-            field=models.ManyToManyField(blank=True, related_name='index_profiles', through='index.IndexAffiliation', to='scales.faction'),
         ),
     ]

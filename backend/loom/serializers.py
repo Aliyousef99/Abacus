@@ -1,36 +1,48 @@
 from rest_framework import serializers
-from .models import Operation, OperationLog, Asset, AssetRequisition
-from lineage.serializers import AgentSerializer  # Assuming this exists for nesting
-from scales.serializers import FactionSerializer # Assuming this exists for nesting
-from codex.serializers import CodexEntrySerializer   # Assuming this exists for nesting
+from .models import Operation, OperationLog, Asset, AssetRequisition, OperationAssignment, OperationReportLink
+from lineage.serializers import AgentSerializer
+from scales.serializers import FactionSerializer
+from index.serializers import IndexProfileSummarySerializer
+from codex.serializers import UserDisplaySerializer
+
+class OperationLogSerializer(serializers.ModelSerializer):
+    user_display_name = serializers.CharField(source='user.profile.display_name', read_only=True)
+
+    class Meta:
+        model = OperationLog
+        fields = ['id', 'message', 'timestamp', 'user_display_name']
+
 
 class OperationSerializer(serializers.ModelSerializer):
-    """Serializer for the list view of operations."""
-    class Meta:
-        model = Operation
-        fields = ['id', 'codename', 'objective', 'status', 'success_probability', 'started_at', 'ended_at']
-
-class OperationDetailSerializer(serializers.ModelSerializer):
-    """Detailed serializer for a single operation profile."""
-    targets = FactionSerializer(many=True, read_only=True)
-    personnel = AgentSerializer(many=True, read_only=True)
-    contingencies = CodexEntrySerializer(many=True, read_only=True)
-
+    """Serializer for list and update operations."""
     class Meta:
         model = Operation
         fields = [
-            'id', 'codename', 'objective', 'status', 
-            'success_probability', 'collateral_risk',
-            'targets', 'personnel', 'contingencies', 'assets', 'after_action_report',
-            'created_at', 'updated_at', 'started_at', 'ended_at'
+            'id', 'codename', 'objective', 'status', 'collateral_risk',
+            'created_at', 'started_at', 'ended_at'
         ]
 
-class OperationLogSerializer(serializers.ModelSerializer):
-    user_username = serializers.CharField(source='user.username', read_only=True)
+
+class OperationAssignmentSerializer(serializers.ModelSerializer):
+    """Serializer for the agent-operation link, including their role."""
+    agent = AgentSerializer(read_only=True)
+
     class Meta:
-        model = OperationLog
-        fields = ['id', 'user', 'user_username', 'message', 'timestamp']
-        read_only_fields = ['id', 'user', 'user_username', 'timestamp']
+        model = OperationAssignment
+        fields = ['id', 'agent', 'role_in_op']
+
+class OperationDetailSerializer(OperationSerializer):
+    """Detailed serializer for a single operation profile."""
+    personnel = OperationAssignmentSerializer(source='operationassignment_set', many=True, read_only=True)
+    targets = FactionSerializer(many=True, read_only=True) # Faction targets
+    individual_targets = IndexProfileSummarySerializer(many=True, read_only=True) # Profile targets
+    logs = OperationLogSerializer(many=True, read_only=True)
+
+    class Meta(OperationSerializer.Meta):
+        fields = OperationSerializer.Meta.fields + [
+            'personnel', 'targets', 'individual_targets', 'logs',
+            'after_action_report', 'success_probability'
+        ]
 
 class AssetSerializer(serializers.ModelSerializer):
     class Meta:
@@ -50,3 +62,13 @@ class AssetRequisitionSerializer(serializers.ModelSerializer):
             'approved_by', 'approved_by_username', 'decided_at', 'note', 'created_at'
         ]
         read_only_fields = ['requested_by', 'status', 'approved_by', 'decided_at', 'created_at']
+
+class OperationReportLinkSerializer(serializers.ModelSerializer):
+    """Serializer for the report-operation link."""
+    report_id = serializers.ReadOnlyField(source='report.id')
+    report_title = serializers.CharField(source='report.title', read_only=True)
+    linked_by_username = serializers.CharField(source='linked_by.username', read_only=True)
+
+    class Meta:
+        model = OperationReportLink
+        fields = ['id', 'operation', 'report_id', 'report_title', 'linked_by', 'linked_by_username', 'linked_at']

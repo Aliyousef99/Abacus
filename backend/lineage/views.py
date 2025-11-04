@@ -25,17 +25,30 @@ class AgentViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Protector can see all agents, others see non-archived agents; order by custom index then alias."""
         role = get_user_role(self.request.user)
-        base_qs = Agent.all_objects.all() if role == 'PROTECTOR' else Agent.objects.all()
+        base_qs = Agent.all_objects.select_related('index_profile') if role == 'PROTECTOR' else Agent.objects.select_related('index_profile')
         # Order by order_index (nulls last), then alias
         return base_qs.order_by(models.F('order_index').asc(nulls_last=True), 'alias')
 
     def perform_create(self, serializer):
-        agent = serializer.save()
+        # The serializer now handles the index_profile_id field for writing
+        agent = serializer.save() 
         log_action(self.request.user, f"Created agent '{agent.alias}'", target=agent)
 
     def perform_update(self, serializer):
+        instance = serializer.instance
+        # Check if any of the secure comms fields have changed
+        comms_fields = ['secure_comms_channel', 'secure_comms_contact_id', 'duress_code']
+        has_comms_changed = any(
+            serializer.validated_data.get(field) != getattr(instance, field)
+            for field in comms_fields
+            if field in serializer.validated_data
+        )
+
+        if has_comms_changed:
+            serializer.validated_data['last_contacted_at'] = timezone.now()
+
         agent = serializer.save()
-        log_action(self.request.user, f"Updated agent '{agent.alias}'", target=agent)
+        log_action(self.request.user, f"Updated agent '{agent.alias}'", target=agent)    
 
     def create(self, request, *args, **kwargs):
         """Override create to provide clearer 4xx errors instead of 500s and normalize payload."""

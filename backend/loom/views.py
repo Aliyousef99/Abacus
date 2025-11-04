@@ -1,20 +1,39 @@
-from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework import viewsets, status, serializers
+from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404
+from django.db import transaction
 
 from django.utils import timezone
-from .models import Operation, OperationLog, Asset, AssetRequisition
+from .models import Operation, OperationAssignment, OperationLog, Asset, AssetRequisition, OperationReportLink
 from .serializers import (
-    OperationSerializer, OperationDetailSerializer,
-    OperationLogSerializer, AssetSerializer, AssetRequisitionSerializer
+    OperationSerializer,
+    OperationLogSerializer, AssetSerializer, AssetRequisitionSerializer, OperationReportLinkSerializer
 )
+from codex.serializers import EchoSerializer
 from scales.models import Faction
+from index.models import IndexProfile
 from lineage.models import Agent
 from api.permissions import get_user_role, IsProtector, IsProtectorOrHeir
 from audit.utils import log_action
+
+class PersonnelAssignmentSerializer(serializers.ModelSerializer):
+    agent_id = serializers.ReadOnlyField(source='agent.id')
+    alias = serializers.ReadOnlyField(source='agent.alias')
+
+    class Meta:
+        model = OperationAssignment
+        fields = ['agent_id', 'alias', 'role_in_op']
+
+class OperationDetailSerializer(OperationSerializer):
+    logs = OperationLogSerializer(many=True, read_only=True)
+    personnel = PersonnelAssignmentSerializer(source='operationassignment_set', many=True, read_only=True)
+    report_links = OperationReportLinkSerializer(many=True, read_only=True)
+
+    class Meta(OperationSerializer.Meta):
+        fields = OperationSerializer.Meta.fields + ['logs', 'personnel', 'report_links', 'after_action_report']
 
 class OperationViewSet(viewsets.ModelViewSet):
     queryset = Operation.objects.all().order_by('-created_at')
@@ -23,7 +42,7 @@ class OperationViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action == 'retrieve':
             return OperationDetailSerializer
-        return OperationSerializer
+        return self.serializer_class
 
     def get_permissions(self):
         """Assign permissions based on action."""
@@ -39,9 +58,18 @@ class OperationViewSet(viewsets.ModelViewSet):
             self.permission_classes = [IsProtectorOrHeir] # Logic inside methods will handle finer details
         return super().get_permissions()
 
-    def perform_create(self, serializer):
-        op = serializer.save()
-        log_action(self.request.user, f"Created operation '{op.codename}'", target=op)
+    def create(self, request, *args, **kwargs):
+        # Handle pre-populating targets from Silo workflow
+        target_ids = request.data.pop('targets', [])
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        operation = serializer.save()
+        if target_ids:
+            valid_targets = Faction.objects.filter(id__in=target_ids)
+            operation.targets.set(valid_targets)
+        log_action(self.request.user, f"Created operation '{operation.codename}'", target=operation)
+        headers = self.get_success_headers(serializer.data)
+        return Response(OperationDetailSerializer(operation).data, status=status.HTTP_201_CREATED, headers=headers)
 
     def perform_update(self, serializer):
         role = get_user_role(self.request.user)
@@ -50,6 +78,11 @@ class OperationViewSet(viewsets.ModelViewSet):
         if role == 'HEIR' and operation.status != 'PLANNING':
             raise PermissionDenied("Heirs can only edit operations in the PLANNING stage.")
         
+        # Prevent Heir from commencing an operation
+        new_status = serializer.validated_data.get('status')
+        if role == 'HEIR' and new_status == 'ACTIVE' and operation.status == 'PLANNING':
+            raise PermissionDenied("Only the Protector can commence an operation.")
+
         updated_op = serializer.save()
         log_action(self.request.user, f"Updated operation '{updated_op.codename}'", target=updated_op)
 
@@ -82,25 +115,64 @@ class OperationViewSet(viewsets.ModelViewSet):
         log_action(request.user, f"Unlinked target '{faction.name}' from operation '{operation.codename}'", target=operation)
         return Response({'status': 'target unlinked'}, status=status.HTTP_200_OK)
 
-    @action(detail=True, methods=['post'], url_path='assign-personnel')
-    def assign_personnel(self, request, pk=None):
+    @action(detail=True, methods=['post'], url_path='manage-targets')
+    def manage_targets(self, request, pk=None):
         operation = self.get_object()
         if operation.status != 'PLANNING':
-            return Response({'error': 'Personnel cannot be modified once operation is ACTIVE.'}, status=status.HTTP_400_BAD_REQUEST)
-        agent = get_object_or_404(Agent, pk=request.data.get('agent_id'))
-        operation.personnel.add(agent)
-        log_action(request.user, f"Assigned agent '{agent.alias}' to operation '{operation.codename}'", target=operation)
-        return Response({'status': 'personnel assigned'}, status=status.HTTP_200_OK)
+            return Response({'error': 'Targets cannot be modified once an operation is active.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=True, methods=['post'], url_path='unassign-personnel')
-    def unassign_personnel(self, request, pk=None):
+        faction_ids = request.data.get('faction_ids', [])
+        profile_ids = request.data.get('profile_ids', [])
+
+        with transaction.atomic():
+            if faction_ids is not None:
+                valid_factions = Faction.objects.filter(id__in=faction_ids)
+                operation.targets.set(valid_factions)
+
+            if profile_ids is not None:
+                valid_profiles = IndexProfile.objects.filter(id__in=profile_ids)
+                operation.individual_targets.set(valid_profiles)
+
+        log_action(request.user, f"Updated targets for operation '{operation.codename}'", target=operation)
+        return Response(OperationDetailSerializer(operation).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get', 'post'], url_path='manage-personnel')
+    def manage_personnel(self, request, pk=None):
         operation = self.get_object()
+        
+        if request.method.lower() == 'get':
+            assigned_agents = operation.operationassignment_set.select_related('agent').all()
+            assigned_ids = [a.agent_id for a in assigned_agents]
+            
+            # Search for available agents
+            query = request.query_params.get('q', '').strip()
+            candidates = []
+            if query:
+                candidates = Agent.objects.filter(alias__icontains=query).exclude(id__in=assigned_ids)[:10]
+
+            return Response({
+                'assigned': [{'agent_id': a.agent.id, 'alias': a.agent.alias, 'role_in_op': a.role_in_op} for a in assigned_agents],
+                'candidates': [{'id': a.id, 'alias': a.alias} for a in candidates]
+            })
+
+        # POST
         if operation.status != 'PLANNING':
-            return Response({'error': 'Personnel cannot be modified once operation is ACTIVE.'}, status=status.HTTP_400_BAD_REQUEST)
-        agent = get_object_or_404(Agent, pk=request.data.get('agent_id'))
-        operation.personnel.remove(agent)
-        log_action(request.user, f"Unassigned agent '{agent.alias}' from operation '{operation.codename}'", target=operation)
-        return Response({'status': 'personnel unassigned'}, status=status.HTTP_200_OK)
+            return Response({'error': 'Personnel cannot be modified once an operation is active.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        assignments = request.data.get('assignments', [])
+        if not isinstance(assignments, list):
+            return Response({'error': 'assignments must be a list.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            operation.operationassignment_set.all().delete()
+            new_assignments = []
+            for item in assignments:
+                agent = get_object_or_404(Agent, pk=item.get('agent_id'))
+                new_assignments.append(OperationAssignment(operation=operation, agent=agent, role_in_op=item.get('role_in_op', 'Field Agent')))
+            OperationAssignment.objects.bulk_create(new_assignments)
+            log_action(request.user, f"Updated personnel roster for operation '{operation.codename}'", target=operation)
+
+        return Response({'status': 'personnel updated'}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'], url_path='commence')
     def commence(self, request, pk=None):
@@ -276,3 +348,15 @@ class AssetRequisitionViewSet(viewsets.ReadOnlyModelViewSet):
         req.save(update_fields=['status', 'approved_by', 'decided_at'])
         log_action(request.user, f"Denied asset '{req.asset.name}' for operation '{req.operation.codename}'", target=req.operation)
         return Response(AssetRequisitionSerializer(req).data)
+
+class OperationReportLinkViewSet(viewsets.ModelViewSet):
+    """
+    API endpoint that allows linking reports to operations.
+    """
+    queryset = OperationReportLink.objects.all()
+    serializer_class = OperationReportLinkSerializer
+    permission_classes = [IsProtectorOrHeir]
+
+    def perform_create(self, serializer):
+        serializer.save(linked_by=self.request.user)
+        log_action(self.request.user, f"Linked report to operation", target=serializer.instance.operation)

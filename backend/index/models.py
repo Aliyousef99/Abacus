@@ -1,61 +1,63 @@
 from django.db import models
+from django.utils import timezone
 
+class SoftDeleteManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(deleted_at__isnull=True)
 
 class IndexProfile(models.Model):
-    class Classification(models.TextChoices):
-        ASSET_TALON = 'ASSET_TALON', 'Asset (Talon)'
-        CRIMINAL_AFFILIATED = 'CRIMINAL_AFFILIATED', 'Criminal (Affiliated)'
-        CRIMINAL_UNAFFILIATED = 'CRIMINAL_UNAFFILIATED', 'Criminal (Unaffiliated)'
-        LAW_ENFORCEMENT = 'LAW_ENFORCEMENT', 'Law Enforcement'
-        GOVERNMENT_DOJ = 'GOVERNMENT_DOJ', 'Government / DOJ'
-        CIVILIAN_HIGH = 'CIVILIAN_HIGH', 'Civilian (High Value)'
-        CIVILIAN_LOW = 'CIVILIAN_LOW', 'Civilian (Low Value)'
-
-    class Status(models.TextChoices):
-        ACTIVE = 'ACTIVE', 'Active'
-        DECEASED = 'DECEASED', 'Deceased'
-        INCARCERATED = 'INCARCERATED', 'Incarcerated'
-        MISSING = 'MISSING', 'Missing'
-
-    class ThreatLevel(models.TextChoices):
-        NONE = 'NONE', 'None'
-        LOW = 'LOW', 'Low'
-        MEDIUM = 'MEDIUM', 'Medium'
-        HIGH = 'HIGH', 'High'
-        CRITICAL = 'CRITICAL', 'Critical'
-
+    """
+    Represents a single, comprehensive profile in The Index.
+    """
     full_name = models.CharField(max_length=255)
-    aliases = models.TextField(blank=True)
-    classification = models.CharField(max_length=32, choices=Classification.choices, blank=True, null=True)
-    # Link to one or more Scales Factions (can be empty)
-    affiliations = models.ManyToManyField('scales.Faction', through='IndexAffiliation', related_name='index_profiles', blank=True)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE, blank=True, null=True)
-    threat_level = models.CharField(max_length=16, choices=ThreatLevel.choices, default=ThreatLevel.NONE, blank=True, null=True)
-
-    biography = models.TextField(blank=True)
-    strengths = models.TextField(blank=True)
-    weaknesses = models.TextField(blank=True)
-    known_locations = models.TextField(blank=True)
-    known_vehicles = models.TextField(blank=True)
-
-    # Keep this as URL list for now to avoid adding storage; can be moved to file uploads later
-    surveillance_urls = models.TextField(blank=True, help_text='Comma-separated URLs of surveillance media')
+    aliases = models.TextField(blank=True, help_text="Comma-separated list of aliases.")
     picture_url = models.URLField(max_length=500, blank=True, null=True)
 
+    # Core Attributes
+    classification = models.CharField(max_length=100, blank=True, default='')
+    status = models.CharField(max_length=100, blank=True, default='')
+    threat_level = models.CharField(max_length=50, blank=True, default='')
+
+    # Detailed Information
+    biography = models.TextField(blank=True)
+    strengths = models.TextField(blank=True, help_text="Comma-separated list.")
+    weaknesses = models.TextField(blank=True, help_text="Comma-separated list.")
+    known_locations = models.TextField(blank=True, help_text="Comma-separated list.")
+    known_vehicles = models.TextField(blank=True, help_text="Comma-separated list.")
+    surveillance_urls = models.TextField(blank=True, help_text="Comma-separated list of URLs.")
+
+    # Timestamps & Soft Delete
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True, default=None)
+
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
 
     def __str__(self):
         return self.full_name
 
-
-class IndexAffiliation(models.Model):
-    profile = models.ForeignKey(IndexProfile, on_delete=models.CASCADE, related_name='affiliation_links')
-    faction = models.ForeignKey('scales.Faction', on_delete=models.CASCADE, related_name='affiliation_links')
-    level = models.CharField(max_length=100, blank=True, null=True)
+class IndexConnection(models.Model):
+    """
+    Represents a directional relationship between two IndexProfiles.
+    """
+    from_profile = models.ForeignKey(IndexProfile, on_delete=models.CASCADE, related_name='connections_from')
+    to_profile = models.ForeignKey(IndexProfile, on_delete=models.CASCADE, related_name='connections_to')
+    relationship = models.CharField(max_length=100, blank=True, help_text="e.g., Family, Rival, Known Associate")
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ('profile', 'faction')
+        unique_together = ('from_profile', 'to_profile')
+        ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.profile.full_name} ↔ {getattr(self.faction, 'name', self.faction_id)} ({self.level or '-'})"
+        return f"{self.from_profile.full_name} -> {self.to_profile.full_name} ({self.relationship})"
+
+class IndexAffiliation(models.Model):
+    """
+    Through model for linking IndexProfile to a scales.Faction.
+    This is a placeholder to resolve dependencies.
+    """
+    profile = models.ForeignKey(IndexProfile, on_delete=models.CASCADE)
+    faction = models.ForeignKey('scales.Faction', on_delete=models.CASCADE)
+    level = models.CharField(max_length=100, blank=True, null=True)

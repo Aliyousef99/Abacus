@@ -37,7 +37,7 @@
 *   **Key Features**:
     *   **Faction Profiles**: Each faction has a profile with its name, threat index, description, allies, and known strengths and weaknesses.
     *   **Member Tracking**: The system links individuals from The Index to factions, building a comprehensive picture of each group's membership.
-    *   **Leverage Points**: The Scales tracks "leverage" on factions, which is compromising information that can be used to manipulate them.
+    
     *   **Network Analysis**: A powerful feature that visualizes the relationships between factions, their members, and Talon's own agents, creating a network graph of the city's underworld.
 *   **Role-Based Permissions**:
     *   **Protector/HQ**: Full CRUD access.

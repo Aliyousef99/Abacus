@@ -8,7 +8,6 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('scales', '0009_agent_surveillance_images_faction_picture_url'),
     ]
 
     operations = [
@@ -29,7 +28,6 @@ class Migration(migrations.Migration):
                 ('surveillance_urls', models.TextField(blank=True, help_text='Comma-separated URLs of surveillance media')),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
-                ('affiliations', models.ManyToManyField(blank=True, related_name='index_profiles', to='scales.faction')),
             ],
         ),
     ]

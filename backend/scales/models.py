@@ -1,4 +1,6 @@
 from django.db import models
+from django.utils import timezone
+from index.models import IndexProfile
 
 class SoftDeleteManager(models.Manager):
     def get_queryset(self):
@@ -26,14 +28,25 @@ class Agent(models.Model):
 
 class Faction(models.Model):
     name = models.CharField(max_length=150, unique=True)
-    threat_index = models.PositiveIntegerField(default=50, help_text="A score from 0-100")
+    class ThreatLevel(models.TextChoices):
+        DORMANT = 'DORMANT', 'Dormant'
+        NOMINAL = 'NOMINAL', 'Nominal'
+        ELEVATED = 'ELEVATED', 'Elevated'
+        SEVERE = 'SEVERE', 'Severe'
+        CRITICAL = 'CRITICAL', 'Critical'
+
+    threat_level = models.CharField(max_length=20, choices=ThreatLevel.choices, default=ThreatLevel.DORMANT)
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     picture_url = models.URLField(max_length=500, blank=True, null=True)
-    allies = models.CharField(max_length=255, blank=True, help_text="Comma-separated list of allied factions")
+    supa_uuid = models.UUIDField(blank=True, null=True, help_text="Supabase factions UUID (for Index linkage)")
+
     strengths = models.TextField(blank=True)
     weaknesses = models.TextField(blank=True)
-    members = models.ManyToManyField(Agent, related_name='factions', blank=True)
+    allies = models.TextField(blank=True, default='')
+    rivals = models.TextField(blank=True, default='')
+    surveillance_urls = models.TextField(blank=True, help_text="Comma-separated list of surveillance file URLs.")
+    members = models.ManyToManyField(IndexProfile, through='FactionMembership', related_name='faction_affiliations', blank=True)
     deleted_at = models.DateTimeField(null=True, blank=True, default=None)
 
     objects = SoftDeleteManager()
@@ -44,20 +57,12 @@ class Faction(models.Model):
     
     @property
     def member_count(self):
-        return self.members.count()
+        try:
+            return self.memberships.count()
+        except AttributeError:
+            return 0
 
-class Leverage(models.Model):
-    faction = models.ForeignKey(Faction, related_name='leverage_points', on_delete=models.CASCADE)
-    description = models.TextField(help_text="Details of the compromising information.")
-    potency = models.CharField(max_length=50, default='High') # e.g., Low, Medium, High, Critical
-    acquired_at = models.DateTimeField(auto_now_add=True)
-    deleted_at = models.DateTimeField(null=True, blank=True, default=None)
 
-    objects = SoftDeleteManager()
-    all_objects = models.Manager()
-
-    def __str__(self):
-        return f"Leverage on {self.faction.name}"
 
 from django.contrib.auth.models import User
 
@@ -65,7 +70,7 @@ class FactionHistory(models.Model):
     """Historical snapshots for a faction's key indicators."""
     faction = models.ForeignKey(Faction, related_name='history', on_delete=models.CASCADE)
     timestamp = models.DateTimeField(auto_now_add=True)
-    threat_index = models.IntegerField(null=True, blank=True)
+    threat_level = models.CharField(max_length=20, null=True, blank=True)
     member_count = models.IntegerField(null=True, blank=True)
     updated_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
 
@@ -97,3 +102,47 @@ class Connection(models.Model):
 
     def __str__(self):
         return f"{self.scales_agent.alias} ↔ {self.lineage_agent.alias} ({self.get_relationship_display()})"
+
+class FactionDiplomacy(models.Model):
+    """Defines a diplomatic relationship (e.g., ally, rival) between two factions."""
+    class Relation(models.TextChoices):
+        ALLY = 'ALLY', 'Ally'
+        RIVAL = 'RIVAL', 'Rival'
+        NEUTRAL = 'NEUTRAL', 'Neutral'
+
+    source = models.ForeignKey(Faction, related_name='diplomacy_outgoing', on_delete=models.CASCADE)
+    target = models.ForeignKey(Faction, related_name='diplomacy_incoming', on_delete=models.CASCADE, null=True, blank=True)
+    target_name = models.CharField(max_length=150, blank=True, help_text="Name of the target if it's not in the system.")
+    relation = models.CharField(max_length=32, choices=Relation.choices, default=Relation.NEUTRAL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('source', 'target', 'relation')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        target_display = self.target.name if self.target else self.target_name
+        return f"{self.source.name} -> {target_display} ({self.get_relation_display()})"
+
+class FactionMembership(models.Model):
+    """Through model linking Faction to IndexProfile with an affiliation level."""
+    class Affiliation(models.TextChoices):
+        LEADER = 'Leader', 'Leader'
+        HIGH_RANKING_MEMBER = 'High ranking member', 'High ranking member'
+        MEMBER = 'Member', 'Member'
+        ASSOCIATE = 'Associate', 'Associate'
+        HANGAROUND = 'Hangaround', 'Hangaround'
+        AFFILIATE = 'Affiliate', 'Affiliate'
+        SUPPORTER = 'Supporter', 'Supporter'
+        INFORMANT = 'Informant', 'Informant'
+        UNKNOWN = 'Unknown', 'Unknown'
+
+    faction = models.ForeignKey(Faction, on_delete=models.CASCADE, related_name='memberships')
+    profile = models.ForeignKey(IndexProfile, on_delete=models.CASCADE, related_name='faction_memberships')
+    affiliation = models.CharField(max_length=32, choices=Affiliation.choices, default=Affiliation.ASSOCIATE)
+    added_at = models.DateTimeField(db_column='added_at', default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True, db_column='updated_at')
+
+    class Meta:
+        unique_together = ('faction', 'profile')
+        ordering = ['-added_at']
