@@ -3,6 +3,7 @@
 !/frontend/
 !/vercel.json
 !/.gitignore
+!/build.sh
 
 # OS/Editor
 .DS_Store
