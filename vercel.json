@@ -7,12 +7,10 @@
       "config": { "maxLambdaSize": "15mb", "runtime": "python3.9" }
     }
   ],
-  "outputDirectory": "staticfiles",
   "routes": [
     {
       "src": "/static/(.*)",
-      "headers": { "cache-control": "public, max-age=31536000, immutable" },
-      "dest": "/$1"
+      "dest": "/staticfiles/$1"
     },
     {
       "src": "/(.*)",
