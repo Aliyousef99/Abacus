@@ -34,3 +34,4 @@ backend/staticfiles/
 # Coverage/Reports
 .coverage
 htmlcov/
+.vercel
