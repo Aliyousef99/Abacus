@@ -2,10 +2,9 @@
   "version": 2,
   "builds": [
     {
-      "src": "backend/requirements.txt",
+      "src": "build.sh",
       "use": "@vercel/static-build",
       "config": {
-        "command": "python3 -m pip install -r backend/requirements.txt && python3 backend/manage.py collectstatic --noinput",
         "outputDirectory": "staticfiles"
       }
     },
@@ -26,4 +25,3 @@
     }
   ]
 }
-
