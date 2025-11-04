@@ -123,7 +123,7 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR.parent / 'staticfiles' # Make sure .parent is here
+STATIC_ROOT = BASE_DIR.parent / 'public' # Make sure .parent is here
 
 
 STORAGES = {
