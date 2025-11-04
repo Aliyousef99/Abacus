@@ -20,6 +20,9 @@ django-cors-headers
 # WhiteNoise is used to serve static files in production.
 # The [brotli] extra adds support for Brotli compression.
 whitenoise[brotli]
+whitenoise
+
 
 # Production WSGI Server
 gunicorn
+
