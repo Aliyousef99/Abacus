@@ -1,7 +1,8 @@
-## Standard ignores
-# We will now track everything by default, except for the files listed below.
-# The lines that ignored everything and only un-ignored the backend have been removed.
-!/frontend/ # This line is no longer strictly necessary but is kept for clarity
+*
+!/backend/
+!/frontend/
+!/vercel.json
+!/.gitignore
 
 # OS/Editor
 .DS_Store
@@ -21,8 +22,7 @@ venv/
 
 # Env files
 .env
-.env.*
-backend/.env
+backend/.env*
 
 # Django
 backend/staticfiles/

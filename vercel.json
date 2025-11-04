@@ -6,10 +6,10 @@
       "config": { "maxLambdaSize": "15mb", "runtime": "python3.9" }
     }
   ],
-  "routes": [
+  "rewrites": [
     {
       "src": "/(.*)",
-      "dest": "backend/abacus_project/wsgi.py"
+      "destination": "backend/abacus_project/wsgi.py"
     }
   ]
 }
