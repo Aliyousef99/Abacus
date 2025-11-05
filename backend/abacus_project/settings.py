@@ -87,7 +87,7 @@ ROOT_URLCONF = "abacus_project.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],  # <— add this
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -99,6 +99,7 @@ TEMPLATES = [
         },
     },
 ]
+
 
 WSGI_APPLICATION = "abacus_project.wsgi.application"
 
@@ -210,3 +211,22 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 CORS_ALLOW_HEADERS = list(default_headers) + [
     "x-secondary-auth",
 ]
+
+
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {"class": "logging.StreamHandler"},
+    },
+    "loggers": {
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": True,
+        },
+        # helpful if your view code logs
+        "": {"handlers": ["console"], "level": "INFO"},
+    },
+}
