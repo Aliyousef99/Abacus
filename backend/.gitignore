@@ -2,3 +2,4 @@
 .env
 
 # Other common Django ignores...
+.vercel
