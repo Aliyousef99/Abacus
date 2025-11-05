@@ -155,7 +155,9 @@ USE_TZ = True
 #   - collectstatic will place files under ../staticfiles at deploy
 #   - all traffic routed through Django; WhiteNoise serves /static/*
 # -----------------------------------------------------------------------------
+TEMPLATES[0]["DIRS"] = [BASE_DIR / "templates"]  # BASE_DIR == backend/
 STATIC_URL = "/static/"
+WHITENOISE_USE_FINDERS = True
 STATIC_ROOT = BASE_DIR.parent / "staticfiles"
 STATICFILES_DIRS = []
 
@@ -164,9 +166,6 @@ STORAGES = {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
-# Serve static files without collectstatic on Vercel
-WHITENOISE_USE_FINDERS = True
-
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # -----------------------------------------------------------------------------
